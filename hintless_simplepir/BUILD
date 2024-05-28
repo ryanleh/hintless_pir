@@ -189,6 +189,9 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
     ],
+    copts = [ 
+        '-fopenmp',
+    ], 
 )
 
 cc_test(
@@ -299,4 +302,5 @@ cc_test(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/time",
     ],
+    linkopts = ["-lgomp"]
 )

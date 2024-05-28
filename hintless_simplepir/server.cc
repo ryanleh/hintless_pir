@@ -240,12 +240,17 @@ absl::StatusOr<HintlessPirResponse> Server::HandleRequest(
     return absl::InvalidArgumentError(
         "`request` contains unexpected number of LinPir requests.");
   }
+
+
+  std::vector<LinPirResponse> answers(num_linpir_requests);
+  #pragma omp parallel for
   for (int k = 0; k < num_linpir_requests; ++k) {
-    RLWE_ASSIGN_OR_RETURN(LinPirResponse linpir_response,
-                          linpir_servers_[k]->HandleRequest(
-                              request.linpir_ct_bs(k), request.linpir_gk_bs()));
-    *response.add_linpir_responses() = std::move(linpir_response);
+    answers[k] = linpir_servers_[k]->HandleRequest(
+        request.linpir_ct_bs(k),
+        request.linpir_gk_bs()
+    ).value();
   }
+  *response.mutable_linpir_responses() = {answers.begin(), answers.end()};
 
   return response;
 }
