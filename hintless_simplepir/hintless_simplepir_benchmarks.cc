@@ -38,8 +38,8 @@ namespace {
 using RlweInteger = Parameters::RlweInteger;
 
 const Parameters kParameters{
-    .db_rows = 1024,
-    .db_cols = 1024,
+    .db_rows = 16000,
+    .db_cols = 16000,
     .db_record_bit_size = 8,
     .lwe_secret_dim = 1400,
     .lwe_modulus_bit_size = 32,
@@ -53,22 +53,23 @@ const Parameters kParameters{
             .gadget_log_bs = {16, 16},
             .error_variance = 8,
             .prng_type = rlwe::PRNG_TYPE_HKDF,
-            .rows_per_block = 1024,
+            .rows_per_block = 2048,
         },
     .prng_type = rlwe::PRNG_TYPE_HKDF,
 };
 
 void BM_HintlessPirRlwe64(benchmark::State& state) {
-  int64_t num_rows = absl::GetFlag(FLAGS_num_rows);
-  int64_t num_cols = absl::GetFlag(FLAGS_num_cols);
+//  int64_t num_rows = absl::GetFlag(FLAGS_num_rows);
+//  int64_t num_cols = absl::GetFlag(FLAGS_num_cols);
   Parameters params = kParameters;
-  params.db_rows = num_rows;
-  params.db_cols = num_cols;
+//  params.db_rows = num_rows;
+//  params.db_cols = num_cols;
+  std::cout << params.db_rows << ", " << params.db_cols << std::endl;
 
   // Create server and fill in random database records.
   auto server = Server::CreateWithRandomDatabaseRecords(params).value();
   const Database* database = server->GetDatabase();
-  ASSERT_EQ(database->NumRecords(), num_rows * num_cols);
+  ASSERT_EQ(database->NumRecords(), params.db_rows * params.db_cols);
 
   // Preprocess the server and get public parameters.
   ASSERT_OK(server->Preprocess());
@@ -104,7 +105,7 @@ extern std::string FLAGS_benchmark_filter;
 using benchmark::FLAGS_benchmark_filter;
 
 int main(int argc, char* argv[]) {
-  FLAGS_benchmark_filter = "";
+  FLAGS_benchmark_filter = "BM_HintlessPirRlwe64";
   benchmark::Initialize(&argc, argv);
   absl::ParseCommandLine(argc, argv);
   if (!FLAGS_benchmark_filter.empty()) {

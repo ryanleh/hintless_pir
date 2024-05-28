@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -231,7 +232,8 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
       RnsGaloisKey::CreateFromKeyComponents(
           gk_pads_, std::move(gk_key_bs), /*power=*/5, &rns_gadget_,
           rns_moduli_, prng_seed_gk_pad_, params_.prng_type));
-
+    
+  auto start = std::chrono::high_resolution_clock::now();
   // Compute all rotations of the query vector.
   int num_rotations = params_.rows_per_block / 2;
   std::vector<RnsCiphertext> ct_rotated_queries;
@@ -245,7 +247,11 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
                               ct_sub, ct_sub_pad_digits_[i - 1], ct_pads_[i]));
     ct_rotated_queries.push_back(std::move(ct_rot));
   }
+  auto end = std::chrono::high_resolution_clock::now();
+  std::cout << "1 Took: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count() << "ns" << std::endl;
 
+  std::cout << "Num DBs :" << databases_.size() << ", " <<  std::endl;
+  start = std::chrono::high_resolution_clock::now();
   // Compute inner products with the databases and serialize them.
   LinPirResponse response;
   response.mutable_ct_inner_products()->Reserve(databases_.size());
@@ -260,6 +266,8 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
     }
     *response.add_ct_inner_products() = std::move(inner_product);
   }
+  end = std::chrono::high_resolution_clock::now();
+  std::cout << "2 Took: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count() << "ns" << std::endl;
   return response;
 }
 
