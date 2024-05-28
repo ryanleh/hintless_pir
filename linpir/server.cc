@@ -206,6 +206,71 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
 }
 
 template <typename RlweInteger>
+absl::Status Server<RlweInteger>::Tester(
+    const ::rlwe::SerializedRnsPolynomial& proto_ct_query_b,
+    const google::protobuf::RepeatedPtrField<::rlwe::SerializedRnsPolynomial>& proto_gk_key_bs
+) {
+    // Deserialize the "b" components from request and build the query ciphertext
+    // and the Galois key.
+    RLWE_ASSIGN_OR_RETURN(
+        RnsPolynomial ct_query_b,
+        RnsPolynomial::Deserialize(proto_ct_query_b, rns_moduli_)
+    );
+    RnsCiphertext ct_query = RnsCiphertext({std::move(ct_query_b), ct_pads_[0]}, rns_moduli_,
+                         /*power_of_s=*/1, /*error=*/0, &rns_error_params_,
+                         rns_context_);
+
+    std::vector<RnsPolynomial> gk_key_bs;
+    gk_key_bs.reserve(proto_gk_key_bs.size());
+    for (int i = 0; i < proto_gk_key_bs.size(); ++i) {
+    RLWE_ASSIGN_OR_RETURN(
+        RnsPolynomial gk_key_b,
+        RnsPolynomial::Deserialize(proto_gk_key_bs[i], rns_moduli_));
+    gk_key_bs.push_back(std::move(gk_key_b));
+    }
+    RLWE_ASSIGN_OR_RETURN(
+      RnsGaloisKey gk,
+      RnsGaloisKey::CreateFromKeyComponents(
+          gk_pads_, std::move(gk_key_bs), /*power=*/5, &rns_gadget_,
+          rns_moduli_, prng_seed_gk_pad_, params_.prng_type));
+
+    // Compute all rotations of the query vector.
+    int num_rotations = params_.rows_per_block / 2;
+    rotated_query_.clear();
+    rotated_query_.reserve(num_rotations);
+    rotated_query_.push_back(std::move(ct_query));
+    #pragma omp parallel for
+    for (int i = 1; i < num_rotations; ++i) {
+        RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_sub,
+                              rotated_query_[i - 1].Substitute(5));
+        RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_rot,
+                              gk.ApplyToWithRandomPad(
+                                  ct_sub, ct_sub_pad_digits_[i - 1], ct_pads_[i]));
+        rotated_query_.push_back(std::move(ct_rot));
+    }
+    return absl::OkStatus();
+}
+
+template <typename RlweInteger>
+absl::StatusOr<LinPirResponse> Server<RlweInteger>::Tester2() {
+  // Compute inner products with the databases and serialize.
+  LinPirResponse response;
+  response.mutable_ct_inner_products()->Reserve(databases_.size());
+  for (auto const& database : databases_) {
+    RLWE_ASSIGN_OR_RETURN(
+        std::vector<RnsCiphertext> ct_blocks,
+        database->InnerProductWithPreprocessedPads(rotated_query_));
+    LinPirResponse::EncryptedInnerProduct inner_product;
+    inner_product.mutable_ct_blocks()->Reserve(ct_blocks.size());
+    for (auto const& ct : ct_blocks) {
+      RLWE_ASSIGN_OR_RETURN(*inner_product.add_ct_blocks(), ct.Serialize());
+    }
+    *response.add_ct_inner_products() = std::move(inner_product);
+  }
+  return response;
+}
+
+template <typename RlweInteger>
 absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
     const ::rlwe::SerializedRnsPolynomial& proto_ct_query_b,
     const google::protobuf::RepeatedPtrField<::rlwe::SerializedRnsPolynomial>&
@@ -233,7 +298,6 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
           gk_pads_, std::move(gk_key_bs), /*power=*/5, &rns_gadget_,
           rns_moduli_, prng_seed_gk_pad_, params_.prng_type));
     
-  auto start = std::chrono::high_resolution_clock::now();
   // Compute all rotations of the query vector.
   int num_rotations = params_.rows_per_block / 2;
   std::vector<RnsCiphertext> ct_rotated_queries;
@@ -247,11 +311,7 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
                               ct_sub, ct_sub_pad_digits_[i - 1], ct_pads_[i]));
     ct_rotated_queries.push_back(std::move(ct_rot));
   }
-  auto end = std::chrono::high_resolution_clock::now();
-  std::cout << "1 Took: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count() << "ns" << std::endl;
 
-  std::cout << "Num DBs :" << databases_.size() << ", " <<  std::endl;
-  start = std::chrono::high_resolution_clock::now();
   // Compute inner products with the databases and serialize them.
   LinPirResponse response;
   response.mutable_ct_inner_products()->Reserve(databases_.size());
@@ -266,8 +326,6 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
     }
     *response.add_ct_inner_products() = std::move(inner_product);
   }
-  end = std::chrono::high_resolution_clock::now();
-  std::cout << "2 Took: " << std::chrono::duration_cast<std::chrono::nanoseconds>(end-start).count() << "ns" << std::endl;
   return response;
 }
 

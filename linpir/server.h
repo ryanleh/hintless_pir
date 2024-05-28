@@ -87,6 +87,16 @@ class Server {
     return HandleRequest(request.ct_query_b(), request.gk_key_bs());
   }
 
+
+  // TODO
+  absl::Status Tester(
+    const rlwe::SerializedRnsPolynomial& proto_ct_query_b,
+    const google::protobuf::RepeatedPtrField<rlwe::SerializedRnsPolynomial>& proto_gk_key_bs
+  );
+
+  
+  absl::StatusOr<LinPirResponse> Tester2();
+
   // Process a LinPir request represented by individual protos.
   // This variant requires the server and the database are preprocessed.
   absl::StatusOr<LinPirResponse> HandleRequest(
@@ -141,6 +151,9 @@ class Server {
   std::vector<RnsPolynomial> ct_pads_;
   std::vector<std::vector<RnsPolynomial>> ct_sub_pad_digits_;
   std::vector<RnsPolynomial> gk_pads_;
+
+  // TODO: Test stuff
+  std::vector<RnsCiphertext> rotated_query_;
 };
 
 }  // namespace linpir
