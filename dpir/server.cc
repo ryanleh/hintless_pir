@@ -245,14 +245,14 @@ absl::StatusOr<HintlessPirResponse> Server::ProcessQuery(const HintlessPirReques
   }
 
   HintlessPirResponse response;
-//  // Handle the LWE part of the request.
-//  lwe::Vector ct_query_vector =
-//      DeserializeLweCiphertext(request.ct_query_vector());
-//  RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
-//                        database_->InnerProductWith(ct_query_vector));
-//  for (auto& ct_record : ct_records) {
-//    *response.add_ct_records() = SerializeLweCiphertext(ct_record);
-//  }
+  // Handle the LWE part of the request.
+  lwe::Vector ct_query_vector =
+      DeserializeLweCiphertext(request.ct_query_vector());
+  RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
+                        database_->InnerProductWith(ct_query_vector));
+  for (auto& ct_record : ct_records) {
+    *response.add_ct_records() = SerializeLweCiphertext(ct_record);
+  }
 
   // Handle the LinPIR requests.
   int num_linpir_requests = request.linpir_ct_bs_size();
@@ -262,7 +262,7 @@ absl::StatusOr<HintlessPirResponse> Server::ProcessQuery(const HintlessPirReques
   }
 
   std::vector<LinPirResponse> answers(num_linpir_requests);
-  #pragma omp parallel for
+//  #pragma omp parallel for
   for (int k = 0; k < num_linpir_requests; ++k) {
     answers[k] = linpir_servers_[k]->Tester2().value();
   }
@@ -294,7 +294,7 @@ absl::StatusOr<HintlessPirResponse> Server::HandleRequest(
   }
 
   std::vector<LinPirResponse> answers(num_linpir_requests);
-  #pragma omp parallel for
+//  #pragma omp parallel for
   for (int k = 0; k < num_linpir_requests; ++k) {
     answers[k] = linpir_servers_[k]->HandleRequest(
         request.linpir_ct_bs(k),

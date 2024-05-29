@@ -174,6 +174,7 @@ absl::Status Server<RlweInteger>::Preprocess() {
   for (auto const& database : databases_) {
     RLWE_RETURN_IF_ERROR(database->Preprocess(ct_pads_));
   }
+
   return absl::OkStatus();
 }
 
@@ -236,19 +237,15 @@ absl::Status Server<RlweInteger>::Tester(
 
     // Compute all rotations of the query vector.
     int num_rotations = params_.rows_per_block / 2;
+
     rotated_query_.clear();
     rotated_query_.reserve(num_rotations);
     rotated_query_.push_back(std::move(ct_query));
-    #pragma omp parallel for
     for (int i = 1; i < num_rotations; ++i) {
-        RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_sub,
-                              rotated_query_[i - 1].Substitute(5));
-        RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_rot,
-                              gk.ApplyToWithRandomPad(
-                                  ct_sub, ct_sub_pad_digits_[i - 1], ct_pads_[i]));
+        RnsCiphertext ct_sub = rotated_query_[i - 1].Substitute(5).value();
+        RnsCiphertext ct_rot = gk.ApplyToWithRandomPad(ct_sub, ct_sub_pad_digits_[i - 1], ct_pads_[i]).value();
         rotated_query_.push_back(std::move(ct_rot));
     }
-
 
     // Print the size of the rotated queries
 
@@ -269,6 +266,7 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::Tester2() {
   // Compute inner products with the databases and serialize.
   LinPirResponse response;
   response.mutable_ct_inner_products()->Reserve(databases_.size());
+
   for (auto const& database : databases_) {
     RLWE_ASSIGN_OR_RETURN(
         std::vector<RnsCiphertext> ct_blocks,

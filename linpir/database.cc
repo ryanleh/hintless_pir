@@ -105,33 +105,47 @@ Database<RlweInteger>::Create(
       diagonals[i].push_back(std::move(diagonal));
     }
   }
+
+  std::vector<RnsCiphertext> ct_inner_products_;
+  ct_inner_products_.reserve(diagonals.size());
+  RLWE_ASSIGN_OR_RETURN(
+      auto rns_error_params,
+      rlwe::RnsErrorParams<ModularInt>::Create(
+          rlwe_params.log_n, moduli, /*aux_moduli=*/{},
+          std::log2(static_cast<double>(rns_context->PlaintextModulus())),
+          std::sqrt(rlwe_params.error_variance)));
+
+  auto empty = rlwe::RnsRlweCiphertext<rlwe::MontgomeryInt<RlweInteger>>::CreateZero(
+    moduli,
+    &rns_error_params
+  );
+  for (int i = 0; i < diagonals.size(); ++i)
+	ct_inner_products_.push_back(RnsCiphertext(empty));
+ 
   return absl::WrapUnique(
       new Database<RlweInteger>(rns_context, std::move(moduli),
-                                std::move(encoder), std::move(diagonals)));
+                                std::move(encoder), std::move(diagonals), std::move(ct_inner_products_)));
 }
 
 template <typename RlweInteger>
 absl::StatusOr<
     std::vector<rlwe::RnsBfvCiphertext<rlwe::MontgomeryInt<RlweInteger>>>>
 Database<RlweInteger>::InnerProductWith(
-    absl::Span<const RnsCiphertext> ct_rotated_queries) const {
+    absl::Span<const RnsCiphertext> ct_rotated_queries) {
   if (ct_rotated_queries.size() != diagonals_[0].size()) {
     return absl::InvalidArgumentError(
         "`ct_rotated_queries` does not contain correct number of ciphertexts.");
   }
 
-  std::vector<RnsCiphertext> ct_inner_products;
-  ct_inner_products.reserve(diagonals_.size());
+  #pragma omp parallel for
   for (int i = 0; i < diagonals_.size(); ++i) {
-    RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_inner_product,
-                          ct_rotated_queries[0].AbsorbSimple(diagonals_[i][0]));
+    RnsCiphertext ct_inner_product = ct_rotated_queries[0].AbsorbSimple(diagonals_[i][0]).value();
     for (int j = 1; j < ct_rotated_queries.size(); ++j) {
-      RLWE_RETURN_IF_ERROR(ct_inner_product.FusedAbsorbAddInPlace(
-          ct_rotated_queries[j], diagonals_[i][j]));
+      ct_inner_product.FusedAbsorbAddInPlace(ct_rotated_queries[j], diagonals_[i][j]);
     }
-    ct_inner_products.push_back(std::move(ct_inner_product));
+    ct_inner_products_[i] = std::move(ct_inner_product);
   }
-  return ct_inner_products;
+  return ct_inner_products_;
 }
 
 template <typename RlweInteger>
@@ -162,7 +176,7 @@ template <typename RlweInteger>
 absl::StatusOr<
     std::vector<rlwe::RnsBfvCiphertext<rlwe::MontgomeryInt<RlweInteger>>>>
 Database<RlweInteger>::InnerProductWithPreprocessedPads(
-    absl::Span<const RnsCiphertext> ct_rotated_queries) const {
+    absl::Span<const RnsCiphertext> ct_rotated_queries) {
   if (pad_inner_products_.size() != diagonals_.size()) {
     return absl::FailedPreconditionError("There is no preprocessed data.");
   }
@@ -170,22 +184,18 @@ Database<RlweInteger>::InnerProductWithPreprocessedPads(
     return absl::InvalidArgumentError(
         "`ct_rotated_queries` does not contain correct number of ciphertexts.");
   }
-
-  std::vector<RnsCiphertext> ct_inner_products;
-  ct_inner_products.reserve(diagonals_.size());
+  
+  #pragma omp parallel for
   for (int i = 0; i < diagonals_.size(); ++i) {
-    RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_inner_product,
-                          ct_rotated_queries[0].AbsorbSimple(diagonals_[i][0]));
+    RnsCiphertext ct_inner_product = ct_rotated_queries[0].AbsorbSimple(diagonals_[i][0]).value();
     for (int j = 1; j < ct_rotated_queries.size(); ++j) {
-      RLWE_RETURN_IF_ERROR(ct_inner_product.FusedAbsorbAddInPlaceWithoutPad(
-          ct_rotated_queries[j], diagonals_[i][j]));
+      ct_inner_product.FusedAbsorbAddInPlaceWithoutPad(ct_rotated_queries[j], diagonals_[i][j]);
     }
-    RLWE_RETURN_IF_ERROR(
-        ct_inner_product.SetPadComponent(pad_inner_products_[i]));
-    ct_inner_products.push_back(std::move(ct_inner_product));
+    ct_inner_product.SetPadComponent(pad_inner_products_[i]);
+    ct_inner_products_[i] = std::move(ct_inner_product);
   }
 
-  return ct_inner_products;
+  return ct_inner_products_;
 }
 
 template class Database<Uint32>;

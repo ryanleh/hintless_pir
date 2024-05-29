@@ -77,7 +77,7 @@ void BM_HintlessPirRlwe64(benchmark::State& state) {
 
   // Create a client and issue request.
   auto client = Client::Create(params, public_params).value();
-  auto request = client->GenerateRequest(1).value();
+  auto request = client->GenerateRequest(3).value();
 
   for (auto _ : state) {
     auto response = server->HandleRequest(request);
@@ -87,7 +87,7 @@ void BM_HintlessPirRlwe64(benchmark::State& state) {
   // Sanity check on the correctness of the instantiation.
   auto response = server->HandleRequest(request).value();
   std::string record = client->RecoverRecord(response).value();
-  std::string expected = database->Record(1).value();
+  std::string expected = database->Record(3).value();
   ASSERT_EQ(record, expected);
 }
 BENCHMARK(BM_HintlessPirRlwe64);

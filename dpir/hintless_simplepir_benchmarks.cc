@@ -38,8 +38,8 @@ namespace {
 using RlweInteger = Parameters::RlweInteger;
 
 const Parameters kParameters{
-    .db_rows = 16000,
-    .db_cols = 16000,
+    .db_rows = 8192,
+    .db_cols = 8192,
     .db_record_bit_size = 9,
     .lwe_secret_dim = 2048,
     .lwe_modulus_bit_size = 32,
@@ -83,14 +83,12 @@ void BM_HintCompr(benchmark::State& state) {
 
   // Print size of the response
   auto response = server->ProcessQuery(request).value();
-  std::cout << "Response size: " << response.ByteSize() / (1 << 20) << "MB" << std::endl;
+  std::cout << "Response size: " << response.ByteSize() / (1 << 10) << "KB" << std::endl;
 
-
-//  // Sanity check on the correctness of the instantiation.
-//  auto response = server->HandleRequest(request).value();
-//  std::string record = client->RecoverRecord(response).value();
-//  std::string expected = database->Record(1).value();
-//  ASSERT_EQ(record, expected);
+  // Sanity check on the correctness of the instantiation.
+  std::string record = client->RecoverRecord(response).value();
+  std::string expected = database->Record(1).value();
+  ASSERT_EQ(record, expected);
 }
 BENCHMARK(BM_HintCompr)->Unit(benchmark::kMillisecond);
 
