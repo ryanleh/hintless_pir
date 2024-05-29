@@ -53,18 +53,13 @@ const Parameters kParameters{
             .gadget_log_bs = {16, 16},
             .error_variance = 8,
             .prng_type = rlwe::PRNG_TYPE_HKDF,
-            .rows_per_block = 2048,
+            .rows_per_block = 1024,
         },
     .prng_type = rlwe::PRNG_TYPE_HKDF,
 };
 
-void BM_HintlessPirRlwe64(benchmark::State& state) {
-//  int64_t num_rows = absl::GetFlag(FLAGS_num_rows);
-//  int64_t num_cols = absl::GetFlag(FLAGS_num_cols);
+void BM_HintCompr(benchmark::State& state) {
   Parameters params = kParameters;
-//  params.db_rows = num_rows;
-//  params.db_cols = num_cols;
-  std::cout << params.db_rows << ", " << params.db_cols << std::endl;
 
   // Create server and fill in random database records.
   auto server = Server::CreateWithRandomDatabaseRecords(params).value();
@@ -79,16 +74,17 @@ void BM_HintlessPirRlwe64(benchmark::State& state) {
   auto client = Client::Create(params, public_params).value();
   auto request = client->GenerateRequest(1).value();
 
-  // TODO
-  server->PreprocessQuery(request);
-
-  // TODO: Print the size of the storage here
-
   for (auto _ : state) {
+    server->PreprocessQuery(request);
     auto response = server->ProcessQuery(request);
     //auto response = server->HandleRequest(request);
     benchmark::DoNotOptimize(response);
   }
+
+  // Print size of the response
+  auto response = server->ProcessQuery(request).value();
+  std::cout << "Response size: " << response.ByteSize() / (1 << 20) << "MB" << std::endl;
+
 
 //  // Sanity check on the correctness of the instantiation.
 //  auto response = server->HandleRequest(request).value();
@@ -96,7 +92,23 @@ void BM_HintlessPirRlwe64(benchmark::State& state) {
 //  std::string expected = database->Record(1).value();
 //  ASSERT_EQ(record, expected);
 }
-BENCHMARK(BM_HintlessPirRlwe64);
+BENCHMARK(BM_HintCompr)->Unit(benchmark::kMillisecond);
+
+void BM_HintPreprocess(benchmark::State& state) {
+  Parameters params = kParameters;
+
+  // Create server and fill in random database records.
+  auto server = Server::CreateWithRandomDatabaseRecords(params).value();
+  const Database* database = server->GetDatabase();
+  ASSERT_EQ(database->NumRecords(), params.db_rows * params.db_cols);
+
+  // Preprocess the server and get public parameters.
+  for (auto _ : state) {
+      server->Preprocess();
+  }
+}
+BENCHMARK(BM_HintPreprocess)->Unit(benchmark::kSecond);
+
 
 }  // namespace
 }  // namespace hintless_simplepir
@@ -111,7 +123,7 @@ extern std::string FLAGS_benchmark_filter;
 using benchmark::FLAGS_benchmark_filter;
 
 int main(int argc, char* argv[]) {
-  FLAGS_benchmark_filter = "BM_HintlessPirRlwe64";
+  FLAGS_benchmark_filter = "BM_HintCompr";
   benchmark::Initialize(&argc, argv);
   absl::ParseCommandLine(argc, argv);
   if (!FLAGS_benchmark_filter.empty()) {

@@ -248,6 +248,19 @@ absl::Status Server<RlweInteger>::Tester(
                                   ct_sub, ct_sub_pad_digits_[i - 1], ct_pads_[i]));
         rotated_query_.push_back(std::move(ct_rot));
     }
+
+
+    // Print the size of the rotated queries
+
+    // TODO: We can just look at one rotation, look the number of coefficients
+    // + the number of RNS components, multiply by the size
+    auto q = rotated_query_[0];
+    uint64_t bytes = q.Len() * q.NumCoeffs() * q.Moduli().size() * sizeof(RlweInteger);
+    uint64_t total_bytes = bytes * rotated_query_.size();
+    uint64_t total_mb = total_bytes / (1 << 20);
+    
+    std::cout << "Have " << rotated_query_.size() << " queries with total size: " << total_mb << "MB" << std::endl;
+
     return absl::OkStatus();
 }
 
