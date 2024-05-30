@@ -38,10 +38,10 @@ namespace {
 using RlweInteger = Parameters::RlweInteger;
 
 const Parameters kParameters{
-    .batch_size = 1,
     .db_rows = 4096,
     .db_cols = 4096,
     .db_record_bit_size = 9,
+    .batch_size = 1,
     .lwe_secret_dim = 2048,
     .lwe_modulus_bit_size = 32,
     .lwe_plaintext_bit_size = 9,

@@ -90,7 +90,7 @@ class Server {
 
   // TODO
   absl::Status PreprocessRequest(
-    std::vector<const rlwe::SerializedRnsPolynomial>& ct_query_bs,
+    std::vector<rlwe::SerializedRnsPolynomial>& ct_query_bs,
     const google::protobuf::RepeatedPtrField<rlwe::SerializedRnsPolynomial>& proto_gk_key_bs
   );
   

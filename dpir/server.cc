@@ -229,7 +229,7 @@ absl::Status Server::PreprocessQueries(const HintlessPirRequest& request) {
     batch_size_ = request.linpir_ct_bs().size() / linpir_servers_.size();
     #pragma omp parallel for
     for (size_t k = 0; k < linpir_servers_.size(); k++) {
-        std::vector<const rlwe::SerializedRnsPolynomial> queries(
+        std::vector<rlwe::SerializedRnsPolynomial> queries(
             request.linpir_ct_bs().begin() + k * batch_size_,
             request.linpir_ct_bs().begin() + (k + 1) * batch_size_
         );

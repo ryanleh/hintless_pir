@@ -209,7 +209,7 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
 // TODO: You know what to do
 template <typename RlweInteger>
 absl::Status Server<RlweInteger>::PreprocessRequest(
-    std::vector<const rlwe::SerializedRnsPolynomial>& proto_ct_query_bs,
+    std::vector<rlwe::SerializedRnsPolynomial>& proto_ct_query_bs,
     const google::protobuf::RepeatedPtrField<rlwe::SerializedRnsPolynomial>& proto_gk_key_bs
 ) {
     // Deserialize the "b" components from request and build the query ciphertexts
