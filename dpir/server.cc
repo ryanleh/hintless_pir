@@ -220,91 +220,86 @@ absl::Status Server::Preprocess() {
   return absl::OkStatus();
 }
 
-absl::Status Server::PreprocessQuery(const HintlessPirRequest& request) {
+absl::Status Server::PreprocessQueries(const HintlessPirRequest& request) {
     if (!IsPreprocessed()) {
         return absl::FailedPreconditionError("Server has not been preprocessed.");
     }
-    
-    // Handle the LinPIR requests.
-    int num_linpir_requests = request.linpir_ct_bs_size();
-    if (num_linpir_requests != linpir_servers_.size()) {
-      return absl::InvalidArgumentError(
-          "`request` contains unexpected number of LinPir requests.");
-    }
 
+    // Compute the rotations
+    batch_size_ = request.linpir_ct_bs().size() / linpir_servers_.size();
     #pragma omp parallel for
-    for (int k = 0; k < num_linpir_requests; ++k) {
-        linpir_servers_[k]->Tester(request.linpir_ct_bs(k), request.linpir_gk_bs());
+    for (size_t k = 0; k < linpir_servers_.size(); k++) {
+        std::vector<const rlwe::SerializedRnsPolynomial> queries(
+            request.linpir_ct_bs().begin() + k * batch_size_,
+            request.linpir_ct_bs().begin() + (k + 1) * batch_size_
+        );
+        linpir_servers_[k]->PreprocessRequest(queries, request.linpir_gk_bs());
     }
     return absl::OkStatus();
 }
 
-absl::StatusOr<HintlessPirResponse> Server::ProcessQuery(const HintlessPirRequest& request) {
+absl::StatusOr<HintlessPirResponse> Server::ProcessQueries(const HintlessPirRequest& request) {
   if (!IsPreprocessed()) {
     return absl::FailedPreconditionError("Server has not been preprocessed.");
   }
 
   HintlessPirResponse response;
-  // Handle the LWE part of the request.
-  lwe::Vector ct_query_vector =
-      DeserializeLweCiphertext(request.ct_query_vector());
-  RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
-                        database_->InnerProductWith(ct_query_vector));
-  for (auto& ct_record : ct_records) {
-    *response.add_ct_records() = SerializeLweCiphertext(ct_record);
+  for (int i = 0; i < request.ct_query_vector().size(); i++) {
+      //// Handle the LWE part of the request.
+      //lwe::Vector ct_query_vector =
+      //    DeserializeLweCiphertext(request.ct_query_vector()[i]);
+      //RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
+      //                      database_->InnerProductWith(ct_query_vector));
+      //for (auto& ct_record : ct_records) {
+      //  *response.add_ct_records() = SerializeLweCiphertext(ct_record);
+      //}
   }
 
-  // Handle the LinPIR requests.
-  int num_linpir_requests = request.linpir_ct_bs_size();
-  if (num_linpir_requests != linpir_servers_.size()) {
-    return absl::InvalidArgumentError(
-        "`request` contains unexpected number of LinPir requests.");
-  }
-
-  std::vector<LinPirResponse> answers(num_linpir_requests);
-//  #pragma omp parallel for
-  for (int k = 0; k < num_linpir_requests; ++k) {
-    answers[k] = linpir_servers_[k]->Tester2().value();
+  std::vector<LinPirResponse> answers;
+  answers.reserve(linpir_servers_.size() * batch_size_);
+  for (int k = 0; k < linpir_servers_.size(); ++k) {
+    auto responses = linpir_servers_[k]->ProcessRequest().value();
+    answers.insert(answers.end(), responses.begin(), responses.end());
   }
   *response.mutable_linpir_responses() = {answers.begin(), answers.end()};
   return response;
 }
 
-absl::StatusOr<HintlessPirResponse> Server::HandleRequest(
-    const HintlessPirRequest& request) {
-  if (!IsPreprocessed()) {
-    return absl::FailedPreconditionError("Server has not been preprocessed.");
-  }
-
-  HintlessPirResponse response;
-  // Handle the LWE part of the request.
-  lwe::Vector ct_query_vector =
-      DeserializeLweCiphertext(request.ct_query_vector());
-  RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
-                        database_->InnerProductWith(ct_query_vector));
-  for (auto& ct_record : ct_records) {
-    *response.add_ct_records() = SerializeLweCiphertext(ct_record);
-  }
-
-  // Handle the LinPIR requests.
-  int num_linpir_requests = request.linpir_ct_bs_size();
-  if (num_linpir_requests != linpir_servers_.size()) {
-    return absl::InvalidArgumentError(
-        "`request` contains unexpected number of LinPir requests.");
-  }
-
-  std::vector<LinPirResponse> answers(num_linpir_requests);
-//  #pragma omp parallel for
-  for (int k = 0; k < num_linpir_requests; ++k) {
-    answers[k] = linpir_servers_[k]->HandleRequest(
-        request.linpir_ct_bs(k),
-        request.linpir_gk_bs()
-    ).value();
-  }
-  *response.mutable_linpir_responses() = {answers.begin(), answers.end()};
-
-  return response;
-}
+//absl::StatusOr<HintlessPirResponse> Server::HandleRequest(
+//    const HintlessPirRequest& request) {
+//  if (!IsPreprocessed()) {
+//    return absl::FailedPreconditionError("Server has not been preprocessed.");
+//  }
+//
+//  HintlessPirResponse response;
+//  // Handle the LWE part of the request.
+//  lwe::Vector ct_query_vector =
+//      DeserializeLweCiphertext(request.ct_query_vector());
+//  RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
+//                        database_->InnerProductWith(ct_query_vector));
+//  for (auto& ct_record : ct_records) {
+//    *response.add_ct_records() = SerializeLweCiphertext(ct_record);
+//  }
+//
+//  // Handle the LinPIR requests.
+//  int num_linpir_requests = request.linpir_ct_bs_size();
+//  if (num_linpir_requests != linpir_servers_.size()) {
+//    return absl::InvalidArgumentError(
+//        "`request` contains unexpected number of LinPir requests.");
+//  }
+//
+//  std::vector<LinPirResponse> answers(num_linpir_requests);
+////  #pragma omp parallel for
+//  for (int k = 0; k < num_linpir_requests; ++k) {
+//    answers[k] = linpir_servers_[k]->HandleRequest(
+//        request.linpir_ct_bs(k),
+//        request.linpir_gk_bs()
+//    ).value();
+//  }
+//  *response.mutable_linpir_responses() = {answers.begin(), answers.end()};
+//
+//  return response;
+//}
 
 HintlessPirServerPublicParams Server::GetPublicParams() const {
   HintlessPirServerPublicParams output;

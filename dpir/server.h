@@ -52,14 +52,12 @@ class Server {
   // be called before accepting client requests.
   absl::Status Preprocess();
 
-  absl::Status PreprocessQuery(const HintlessPirRequest& request);
+  absl::Status PreprocessQueries(const HintlessPirRequest& request);
   
-  absl::StatusOr<HintlessPirResponse> ProcessQuery(const HintlessPirRequest& request);
+  absl::StatusOr<HintlessPirResponse> ProcessQueries(const HintlessPirRequest& request);
 
-
-  absl::StatusOr<HintlessPirResponse> HandleRequest(
-      const HintlessPirRequest& request);
-
+//  absl::StatusOr<HintlessPirResponse> HandleRequest(
+//      const HintlessPirRequest& request);
 
   // Returns the server's public parameters that are sent to the client.
   HintlessPirServerPublicParams GetPublicParams() const;
@@ -105,6 +103,8 @@ class Server {
 
   std::vector<std::vector<std::unique_ptr<LinPirDatabase>>> linpir_databases_;
   std::vector<std::unique_ptr<LinPirServer>> linpir_servers_;
+
+  size_t batch_size_;
 };
 
 }  // namespace hintless_simplepir

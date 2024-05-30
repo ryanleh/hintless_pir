@@ -21,6 +21,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <queue>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -46,11 +47,10 @@ class Client {
       const HintlessPirServerPublicParams& public_params);
 
   // Returns the request for accessing database[index].
-  absl::StatusOr<HintlessPirRequest> GenerateRequest(int64_t index);
+  absl::StatusOr<HintlessPirRequest> GenerateRequest(std::vector<int64_t> indices);
 
   // Returns the retrieved record from the server response.
-  absl::StatusOr<std::string> RecoverRecord(
-      const HintlessPirResponse& response);
+  absl::StatusOr<std::vector<std::string>> RecoverRecord(const HintlessPirResponse& response);
 
  private:
   using RlweInteger = Parameters::RlweInteger;
@@ -68,8 +68,8 @@ class Client {
   // 2) a PRNG seed expanding to the LinPir secret key for encrypting the LWE
   // secret used by the request.
   struct ClientState {
-    int64_t row_idx;
-    int64_t col_idx;
+    std::vector<int64_t> row_idx;
+    std::vector<int64_t> col_idx;
     std::string prng_seed_linpir_sk;
   };
 
@@ -93,11 +93,12 @@ class Client {
   // Encrypts the LWE secret vector using LinPir clients and update `request`
   // with the LinPir requests.
   absl::Status GenerateLinPirRequestInPlace(
-      HintlessPirRequest& request, const lwe::Vector& lwe_secret) const;
+      HintlessPirRequest& request,
+      const std::vector<lwe::Vector>& lwe_secret) const;
 
   // CRT interpolates the LinPir responses to recover the LWE decryption parts,
   // which are the inner products hint * LWE secrets.
-  absl::StatusOr<std::vector<lwe::Vector>> RecoverLweDecryptionParts(
+  absl::StatusOr<std::vector<std::vector<lwe::Vector>>> RecoverLweDecryptionParts(
       const HintlessPirResponse& response) const;
 
   const Parameters params_;
@@ -114,8 +115,9 @@ class Client {
 
   const RlweRnsContext crt_context_;
 
-  // Per request state.
+  // Per batch request state.
   ClientState state_;
+  size_t batch_size_;
 };
 
 }  // namespace hintless_simplepir

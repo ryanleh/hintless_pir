@@ -38,9 +38,12 @@ message HintlessPirServerPublicParams {
 }
 
 message HintlessPirRequest {
-  optional SerializedLweCiphertext ct_query_vector = 1;
+  // The "a" components of the LinPir ciphertexts that encrypt the LWE secrets.
+  repeated SerializedLweCiphertext ct_query_vector = 1;
 
   // The "b" components of the LinPir ciphertexts that encrypt the LWE secrets.
+  //
+  // These get serialized in batches of order lwe -> linpir servers
   repeated rlwe.SerializedRnsPolynomial linpir_ct_bs = 2;
 
   // The "b" components of the Galois key for all LinPir requests.

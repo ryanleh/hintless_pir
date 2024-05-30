@@ -32,6 +32,8 @@ struct Parameters {
   int db_cols;
   int db_record_bit_size;
 
+  int batch_size;
+
   int lwe_secret_dim;
   int lwe_modulus_bit_size;  // 32 or 64
   int lwe_plaintext_bit_size;

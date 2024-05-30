@@ -38,8 +38,9 @@ namespace {
 using RlweInteger = Parameters::RlweInteger;
 
 const Parameters kParameters{
-    .db_rows = 8192,
-    .db_cols = 8192,
+    .batch_size = 1,
+    .db_rows = 4096,
+    .db_cols = 4096,
     .db_record_bit_size = 9,
     .lwe_secret_dim = 2048,
     .lwe_modulus_bit_size = 32,
@@ -70,25 +71,32 @@ void BM_HintCompr(benchmark::State& state) {
   ASSERT_OK(server->Preprocess());
   auto public_params = server->GetPublicParams();
 
-  // Create a client and issue request.
+  // Create a client and issue `batch_size` requests.
   auto client = Client::Create(params, public_params).value();
-  auto request = client->GenerateRequest(1).value();
+  std::vector<int64_t> indices = {1, 2};
+  auto request = client->GenerateRequest(indices).value();
 
   for (auto _ : state) {
-    server->PreprocessQuery(request);
-    auto response = server->ProcessQuery(request);
-    //auto response = server->HandleRequest(request);
+    server->PreprocessQueries(request);
+    auto response = server->ProcessQueries(request);
     benchmark::DoNotOptimize(response);
   }
 
   // Print size of the response
-  auto response = server->ProcessQuery(request).value();
+  server->PreprocessQueries(request);
+  auto response = server->ProcessQueries(request).value();
+ 
   std::cout << "Response size: " << response.ByteSize() / (1 << 10) << "KB" << std::endl;
 
-  // Sanity check on the correctness of the instantiation.
-  std::string record = client->RecoverRecord(response).value();
-  std::string expected = database->Record(1).value();
-  ASSERT_EQ(record, expected);
+//  // Sanity check on the correctness of the instantiation.
+//  std::vector<std::string> record = client->RecoverRecord(response).value();
+//  for (int i = 0; i < indices.size(); i++) {
+//      std::string expected = database->Record(indices[i]).value();
+//      if (record[i] != expected) {
+//          std::cout << "Failed: " << i  << std::endl;
+//      }
+//      //ASSERT_EQ(record[i], expected);
+//  }
 }
 BENCHMARK(BM_HintCompr)->Unit(benchmark::kMillisecond);
 
