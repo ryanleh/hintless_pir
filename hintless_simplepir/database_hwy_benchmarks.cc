@@ -15,18 +15,16 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/flags/flag.h"
 #include "absl/flags/parse.h"
 #include "benchmark/benchmark.h"
-#include "gmock/gmock.h"
 #include "gtest/gtest.h"
-#include "hintless_simplepir/client.h"
 #include "hintless_simplepir/database_hwy.h"
 #include "hintless_simplepir/parameters.h"
-#include "hintless_simplepir/server.h"
-#include "linpir/parameters.h"
-#include "shell_encryption/testing/status_testing.h"
+#include "hintless_simplepir/testing.h"
+#include "lwe/types.h"
 
 ABSL_FLAG(int, num_rows, 1024, "Number of rows");
 ABSL_FLAG(int, num_cols, 1024, "Number of cols");
@@ -38,59 +36,35 @@ namespace {
 using RlweInteger = Parameters::RlweInteger;
 
 const Parameters kParameters{
-    .db_rows = 4096,
-    .db_cols = 4096,
+    .db_rows = 1024,
+    .db_cols = 1024,
     .db_record_bit_size = 8,
     .lwe_secret_dim = 1400,
     .lwe_modulus_bit_size = 32,
     .lwe_plaintext_bit_size = 8,
     .lwe_error_variance = 8,
-    .linpir_params =
-        linpir::RlweParameters<RlweInteger>{
-            .log_n = 12,
-            .qs = {35184371884033ULL, 35184371703809ULL},  // 90 bits
-            .ts = {2056193, 1990657},                      // 42 bits
-            .gadget_log_bs = {16, 16},
-            .error_variance = 8,
-            .prng_type = rlwe::PRNG_TYPE_HKDF,
-            .rows_per_block = 2048,
-        },
     .prng_type = rlwe::PRNG_TYPE_HKDF,
 };
 
-void BM_HintlessPirRlwe64(benchmark::State& state) {
-//  int64_t num_rows = absl::GetFlag(FLAGS_num_rows);
-//  int64_t num_cols = absl::GetFlag(FLAGS_num_cols);
+void BM_InnerProductWith(benchmark::State& state) {
+  int64_t num_rows = absl::GetFlag(FLAGS_num_rows);
+  int64_t num_cols = absl::GetFlag(FLAGS_num_cols);
   Parameters params = kParameters;
-//  params.db_rows = num_rows;
-//  params.db_cols = num_cols;
-  std::cout << params.db_rows << ", " << params.db_cols << std::endl;
+  params.db_rows = num_rows;
+  params.db_cols = num_cols;
 
-  // Create server and fill in random database records.
-  auto server = Server::CreateWithRandomDatabaseRecords(params).value();
-  const Database* database = server->GetDatabase();
-  ASSERT_EQ(database->NumRecords(), params.db_rows * params.db_cols);
+  // Create a database and fill in random database records.
+  const auto database = Database::CreateRandom(params).value();
+  ASSERT_EQ(database->NumRecords(), num_rows * num_cols);
 
-  // Preprocess the server and get public parameters.
-  ASSERT_OK(server->Preprocess());
-  auto public_params = server->GetPublicParams();
-
-  // Create a client and issue request.
-  auto client = Client::Create(params, public_params).value();
-  auto request = client->GenerateRequest(3).value();
+  std::vector<lwe::Integer> query = testing::GenerateRandomQuery(num_cols);
 
   for (auto _ : state) {
-    auto response = server->HandleRequest(request);
-    benchmark::DoNotOptimize(response);
+    auto results = database->InnerProductWith(query);
+    benchmark::DoNotOptimize(results);
   }
-
-  // Sanity check on the correctness of the instantiation.
-  auto response = server->HandleRequest(request).value();
-  std::string record = client->RecoverRecord(response).value();
-  std::string expected = database->Record(3).value();
-  ASSERT_EQ(record, expected);
 }
-BENCHMARK(BM_HintlessPirRlwe64);
+BENCHMARK(BM_InnerProductWith);
 
 }  // namespace
 }  // namespace hintless_simplepir
@@ -105,7 +79,7 @@ extern std::string FLAGS_benchmark_filter;
 using benchmark::FLAGS_benchmark_filter;
 
 int main(int argc, char* argv[]) {
-  FLAGS_benchmark_filter = "BM_HintlessPirRlwe64";
+  FLAGS_benchmark_filter = "";
   benchmark::Initialize(&argc, argv);
   absl::ParseCommandLine(argc, argv);
   if (!FLAGS_benchmark_filter.empty()) {

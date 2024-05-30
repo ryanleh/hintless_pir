@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "hintless_simplepir/database.h"
+#include "hintless_simplepir/database_hwy.h"
 
 #include <cstdint>
 #include <memory>
@@ -43,7 +43,7 @@ using ::testing::HasSubstr;
 using Prng = rlwe::testing::TestingPrng;
 
 const Parameters kParameters{
-    .db_rows = 128,
+    .db_rows = 130,
     .db_cols = 32,
     .db_record_bit_size = 16,
     .lwe_secret_dim = 32,
@@ -107,9 +107,6 @@ TEST_F(DatabaseTest, AppendFailsIfDatabaseIsFull) {
       .lwe_plaintext_bit_size = 8,
       .lwe_error_variance = 8,
   };
-  ASSERT_OK_AND_ASSIGN(
-      lwe::Matrix lwe_query_pad,
-      lwe::ExpandPad(params.db_cols, params.lwe_secret_dim, this->prng_.get()));
 
   ASSERT_OK_AND_ASSIGN(auto database, Database::Create(params));
   ASSERT_OK(database->UpdateLweQueryPad(this->lwe_query_pad_.get()));
@@ -140,6 +137,16 @@ TEST_F(DatabaseTest, AppendRecords) {
     EXPECT_EQ(retrieved, record);
   }
 
+  // Append another row of records to the database.
+  for (int i = 0; i < kParameters.db_cols; ++i) {
+    std::string record = testing::GenerateRandomRecord(kParameters);
+    ASSERT_OK(database->Append(record));
+    int index = kParameters.db_cols + i;
+    EXPECT_EQ(database->NumRecords(), index + 1);
+    ASSERT_OK_AND_ASSIGN(std::string retrieved, database->Record(index));
+    EXPECT_EQ(retrieved, record);
+  }
+
   int num_shards = DivAndRoundUp(kParameters.db_record_bit_size,
                                  kParameters.lwe_plaintext_bit_size);
   ASSERT_EQ(database->Data().size(), num_shards);
@@ -153,41 +160,22 @@ TEST_F(DatabaseTest, UpdateHintsFailsIfLweQueryPadIsNotSet) {
 }
 
 TEST_F(DatabaseTest, UpdateHints) {
-  ASSERT_OK_AND_ASSIGN(auto database, Database::Create(kParameters));
+  ASSERT_OK_AND_ASSIGN(auto database, Database::CreateRandom(kParameters));
   ASSERT_OK(database->UpdateLweQueryPad(this->lwe_query_pad_.get()));
-
-  // A database holding a partially filled row.
-  for (int i = 0; i < kParameters.db_cols - 1; ++i) {
-    std::string record = testing::GenerateRandomRecord(kParameters);
-    ASSERT_OK(database->Append(record));
-  }
-  ASSERT_EQ(database->NumRecords(), kParameters.db_cols - 1);
+  ASSERT_EQ(database->NumRecords(), kParameters.db_cols * kParameters.db_rows);
 
   // Update the hint matrices and check.
   ASSERT_OK(database->UpdateHints());
-  absl::Span<const lwe::Matrix> data_matrices = database->Data();
-  absl::Span<const lwe::Matrix> hint_matrices = database->Hints();
+  absl::Span<const Database::RawMatrix> data_matrices = database->Data();
+  absl::Span<const Database::LweMatrix> hint_matrices = database->Hints();
   ASSERT_EQ(data_matrices.size(), hint_matrices.size());
   for (int i = 0; i < data_matrices.size(); ++i) {
-    lwe::Matrix expected_hint = data_matrices[i] * (*this->lwe_query_pad_);
-    EXPECT_EQ(hint_matrices[i], expected_hint);
-  }
-
-  // Fill in another row into the database.
-  for (int i = 0; i < kParameters.db_cols; ++i) {
-    std::string record = testing::GenerateRandomRecord(kParameters);
-    ASSERT_OK(database->Append(record));
-  }
-  ASSERT_EQ(database->NumRecords(), 2 * kParameters.db_cols - 1);
-
-  // Update the hint matrices again and check.
-  ASSERT_OK(database->UpdateHints());
-  data_matrices = database->Data();
-  hint_matrices = database->Hints();
-  ASSERT_EQ(data_matrices.size(), hint_matrices.size());
-  for (int i = 0; i < data_matrices.size(); ++i) {
-    lwe::Matrix expected_hint = data_matrices[i] * (*this->lwe_query_pad_);
-    EXPECT_EQ(hint_matrices[i], expected_hint);
+    lwe::Matrix data_matrix =
+        ExportRawMatrix(data_matrices[i], kParameters.db_rows,
+                        kParameters.lwe_plaintext_bit_size);
+    lwe::Matrix hint_matrix = ExportLweMatrix(hint_matrices[i]).transpose();
+    lwe::Matrix expected_hint = data_matrix * (*this->lwe_query_pad_);
+    EXPECT_EQ(hint_matrix, expected_hint);
   }
 }
 
@@ -216,37 +204,33 @@ TEST_F(DatabaseTest, AccessRecordWithInvalidIndex) {
 }
 
 TEST_F(DatabaseTest, InnerProductWith) {
-  ASSERT_OK_AND_ASSIGN(auto database, Database::Create(kParameters));
+  ASSERT_OK_AND_ASSIGN(auto database, Database::CreateRandom(kParameters));
   ASSERT_OK(database->UpdateLweQueryPad(this->lwe_query_pad_.get()));
-
-  // A database holding a partially filled row.
-  for (int i = 0; i < kParameters.db_cols - 1; ++i) {
-    std::string record = testing::GenerateRandomRecord(kParameters);
-    ASSERT_OK(database->Append(record));
-  }
   ASSERT_OK(database->UpdateHints());
 
-  // Get the first column.
-  lwe::Vector query0 = lwe::Vector::Zero(kParameters.db_cols);
-  query0[0] = 1;
-  ASSERT_OK_AND_ASSIGN(std::vector<lwe::Vector> product0,
-                       database->InnerProductWith(query0));
-  absl::Span<const lwe::Matrix> data_matrices = database->Data();
-  ASSERT_EQ(product0.size(), data_matrices.size());
-  for (int i = 0; i < product0.size(); ++i) {
-    lwe::Vector expected = data_matrices[i] * query0;
-    EXPECT_EQ(product0[i], expected);
-  }
+  // Get the second column.
+  std::vector<lwe::Integer> query(kParameters.db_cols, 0);
+  query[1] = 1;
+  ASSERT_OK_AND_ASSIGN(std::vector<Database::LweVector> product,
+                       database->InnerProductWith(query));
+  absl::Span<const Database::RawMatrix> data_matrices = database->Data();
+  ASSERT_EQ(product.size(), data_matrices.size());
 
-  // Get the last column, which should be 0.
-  lwe::Vector query1 = lwe::Vector::Zero(kParameters.db_cols);
-  query1[kParameters.db_cols - 1] = 1;
-  ASSERT_OK_AND_ASSIGN(std::vector<lwe::Vector> product1,
-                       database->InnerProductWith(query1));
-  ASSERT_EQ(product1.size(), data_matrices.size());
-  for (int i = 0; i < product1.size(); ++i) {
-    lwe::Vector expected = data_matrices[i] * query1;
-    EXPECT_EQ(product1[i], expected);
+  Database::BlockType mask =
+      (Database::BlockType{1} << kParameters.lwe_plaintext_bit_size) - 1;
+  int num_values_per_block =
+      sizeof(Database::BlockType) / sizeof(lwe::PlainInteger);
+  for (int i = 0; i < product.size(); ++i) {
+    ASSERT_EQ(product[i].size(), kParameters.db_rows);
+    for (int j = 0; j < product[i].size(); ++j) {
+      int block_idx = j / num_values_per_block;
+      int block_pos = j % num_values_per_block;
+      int base_bits = block_pos * 8 * sizeof(lwe::PlainInteger);
+      Database::BlockType block = data_matrices[i][1][block_idx];
+      lwe::Integer expected =
+          static_cast<lwe::Integer>((block >> base_bits) & mask);
+      EXPECT_EQ(product[i][j], expected);
+    }
   }
 }
 
