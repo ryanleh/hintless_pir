@@ -269,6 +269,7 @@ absl::StatusOr<std::vector<LinPirResponse>> Server<RlweInteger>::ProcessRequest(
 
   // Compute inner products with the databases and serialize.
   std::vector<LinPirResponse> responses(batch_size_);
+  #pragma omp parallel for 
   for (int i = 0; i < batch_size_; i++) {
     // Compute all rotations of the query vector.
     for (int j = 1; j < num_rotations; ++j) {
@@ -279,17 +280,17 @@ absl::StatusOr<std::vector<LinPirResponse>> Server<RlweInteger>::ProcessRequest(
 
     responses[i].mutable_ct_inner_products()->Reserve(databases_.size());
     for (auto const& database : databases_) {
-      RLWE_ASSIGN_OR_RETURN(
-          std::vector<RnsCiphertext> ct_blocks,
-          database->InnerProductWithPreprocessedPads(rotated_queries_[i]));
+      std::vector<RnsCiphertext> ct_blocks = database->InnerProductWithPreprocessedPads(rotated_queries_[i]).value();
       LinPirResponse::EncryptedInnerProduct inner_product;
       inner_product.mutable_ct_blocks()->Reserve(ct_blocks.size());
       for (auto const& ct : ct_blocks) {
-        RLWE_ASSIGN_OR_RETURN(*inner_product.add_ct_blocks(), ct.Serialize());
+        *inner_product.add_ct_blocks() = ct.Serialize().value();
       }
       *responses[i].add_ct_inner_products() = std::move(inner_product);
     }
+    rotated_queries_[i].erase(rotated_queries_[i].begin() + 1, rotated_queries_[i].end());
   }
+  
 
   return responses;
 }

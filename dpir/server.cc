@@ -227,7 +227,6 @@ absl::Status Server::PreprocessQueries(const HintlessPirRequest& request) {
 
     // Compute the rotations
     batch_size_ = request.linpir_ct_bs().size() / linpir_servers_.size();
-    #pragma omp parallel for
     for (size_t k = 0; k < linpir_servers_.size(); k++) {
         std::vector<rlwe::SerializedRnsPolynomial> queries(
             request.linpir_ct_bs().begin() + k * batch_size_,
@@ -244,16 +243,16 @@ absl::StatusOr<HintlessPirResponse> Server::ProcessQueries(const HintlessPirRequ
   }
 
   HintlessPirResponse response;
-  for (int i = 0; i < request.ct_query_vector().size(); i++) {
-      //// Handle the LWE part of the request.
-      //lwe::Vector ct_query_vector =
-      //    DeserializeLweCiphertext(request.ct_query_vector()[i]);
-      //RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
-      //                      database_->InnerProductWith(ct_query_vector));
-      //for (auto& ct_record : ct_records) {
-      //  *response.add_ct_records() = SerializeLweCiphertext(ct_record);
-      //}
-  }
+//  for (int i = 0; i < request.ct_query_vector().size(); i++) {
+//      // Handle the LWE part of the request.
+//      lwe::Vector ct_query_vector =
+//          DeserializeLweCiphertext(request.ct_query_vector()[i]);
+//      RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
+//                            database_->InnerProductWith(ct_query_vector));
+//      for (auto& ct_record : ct_records) {
+//        *response.add_ct_records() = SerializeLweCiphertext(ct_record);
+//      }
+//  }
 
   std::vector<LinPirResponse> answers;
   answers.reserve(linpir_servers_.size() * batch_size_);

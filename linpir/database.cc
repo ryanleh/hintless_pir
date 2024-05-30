@@ -185,17 +185,22 @@ Database<RlweInteger>::InnerProductWithPreprocessedPads(
         "`ct_rotated_queries` does not contain correct number of ciphertexts.");
   }
   
-  #pragma omp parallel for
+//  #pragma omp parallel for
+  
+  std::vector<RnsCiphertext> ct_inner_products;
+  ct_inner_products.reserve(diagonals_.size());
   for (int i = 0; i < diagonals_.size(); ++i) {
     RnsCiphertext ct_inner_product = ct_rotated_queries[0].AbsorbSimple(diagonals_[i][0]).value();
     for (int j = 1; j < ct_rotated_queries.size(); ++j) {
       ct_inner_product.FusedAbsorbAddInPlaceWithoutPad(ct_rotated_queries[j], diagonals_[i][j]);
     }
     ct_inner_product.SetPadComponent(pad_inner_products_[i]);
-    ct_inner_products_[i] = std::move(ct_inner_product);
+    ct_inner_products.push_back(std::move(ct_inner_product));
+//    ct_inner_products_[i] = std::move(ct_inner_product);
   }
 
-  return ct_inner_products_;
+//  return ct_inner_products_;
+  return ct_inner_products;
 }
 
 template class Database<Uint32>;
