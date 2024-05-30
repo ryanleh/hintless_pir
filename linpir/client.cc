@@ -77,27 +77,30 @@ Client<RlweInteger>::Create(const RlweParameters<RlweInteger>& parameters,
 }
 
 template <typename RlweInteger>
-absl::StatusOr<rlwe::RnsBfvCiphertext<rlwe::MontgomeryInt<RlweInteger>>>
-Client<RlweInteger>::EncryptQuery(absl::Span<const RlweInteger> query_vector,
+absl::StatusOr<std::vector<rlwe::RnsBfvCiphertext<rlwe::MontgomeryInt<RlweInteger>>>>
+Client<RlweInteger>::EncryptQuery(std::vector<std::vector<RlweInteger>> query_vectors,
                                   absl::string_view prng_seed_sk) {
   int num_slots_per_group = 1 << (params_.log_n - 1);
-  if (query_vector.size() > num_slots_per_group) {
+  if (query_vectors[0].size() > num_slots_per_group) {
     return absl::InvalidArgumentError(
         absl::StrCat("`query_vector` can contain at most ", num_slots_per_group,
                      " element."));
   }
 
-  // Encode the query vector.
+  // Encode the query vectors.
   int num_rotations = params_.rows_per_block / 2;
-  std::vector<RlweInteger> slots(num_slots_per_group * 2, 0);
-  for (int i = 0; i < num_slots_per_group; ++i) {
-    if (i < query_vector.size()) {
-      slots[i] = query_vector[i];
-    }
-    int snd_idx = (num_rotations + i) % num_slots_per_group;
-    if (snd_idx < query_vector.size()) {
-      slots[num_slots_per_group + i] = query_vector[snd_idx];
-    }
+  std::vector<std::vector<RlweInteger>> query_slots(query_vectors.size());
+  for (int i = 0; i < query_vectors.size(); i++) {
+      query_slots[i].resize(num_slots_per_group * 2, 0);
+      for (int j = 0; j < num_slots_per_group; ++j) {
+        if (j < query_vectors[i].size()) {
+          query_slots[i][j] = query_vectors[i][j];
+        }
+        int snd_idx = (num_rotations + j) % num_slots_per_group;
+        if (snd_idx < query_vectors[i].size()) {
+          query_slots[i][num_slots_per_group + j] = query_vectors[i][snd_idx];
+        }
+      }
   }
 
   // Create PRNGs for sampling RLWE secret key and encryption.
@@ -128,21 +131,27 @@ Client<RlweInteger>::EncryptQuery(absl::Span<const RlweInteger> query_vector,
       RnsSecretKey::Sample(params_.log_n, params_.error_variance, rns_moduli_,
                            prng_sk.get()));
 
-  // Encrypt the query vector
-  RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_query,
-                        secret_key.template EncryptBfv<Encoder>(
-                            slots, &encoder_, &rns_error_params_,
+  // Encrypt each the query vector
+  std::vector<RnsCiphertext> ct_queries;
+  ct_queries.reserve(query_slots.size());
+  for (int i = 0; i < query_slots.size(); i++) {
+      RLWE_ASSIGN_OR_RETURN(auto query,
+                            secret_key.template EncryptBfv<Encoder>(
+                            query_slots[i], &encoder_, &rns_error_params_,
                             prng_enc.get(), prng_pad.get()));
+    
+    ct_queries.push_back(std::move(query));
+  }
 
   // Store the secret key
   secret_key_ = std::make_unique<RnsSecretKey>(std::move(secret_key));
 
-  return ct_query;
+  return ct_queries;
 }
 
 template <typename RlweInteger>
-absl::StatusOr<rlwe::RnsBfvCiphertext<rlwe::MontgomeryInt<RlweInteger>>>
-Client<RlweInteger>::EncryptQuery(absl::Span<const RlweInteger> query_vector) {
+absl::StatusOr<std::vector<rlwe::RnsBfvCiphertext<rlwe::MontgomeryInt<RlweInteger>>>>
+Client<RlweInteger>::EncryptQuery(std::vector<std::vector<RlweInteger>> query_vectors) {
   // Create PRNG for sampling RLWE secret key.
   std::string prng_seed_sk;
   if (params_.prng_type == rlwe::PRNG_TYPE_HKDF) {
@@ -152,7 +161,7 @@ Client<RlweInteger>::EncryptQuery(absl::Span<const RlweInteger> query_vector) {
     RLWE_ASSIGN_OR_RETURN(prng_seed_sk,
                           rlwe::SingleThreadChaChaPrng::GenerateSeed());
   }
-  return EncryptQuery(query_vector, prng_seed_sk);
+  return EncryptQuery(query_vectors, prng_seed_sk);
 }
 
 template <typename RlweInteger>
@@ -215,7 +224,6 @@ Client<RlweInteger>::Recover(const LinPirResponse& response) {
   }
 
   RlweInteger plaintext_modulus = rns_context_->PlaintextModulus();
-
   std::vector<std::vector<RlweInteger>> results(
       response.ct_inner_products_size());
   for (int i = 0; i < response.ct_inner_products_size(); ++i) {
@@ -247,9 +255,6 @@ Client<RlweInteger>::Recover(const LinPirResponse& response) {
       }
     }
   }
-
-  // Clear the cached RLWE secret key.
-  secret_key_ = nullptr;
 
   return results;
 }

@@ -58,13 +58,13 @@ class Database {
 
   // Compute the matrix-vector product with the encrypted query vector.
   absl::StatusOr<std::vector<RnsCiphertext>> InnerProductWith(
-      absl::Span<const RnsCiphertext> ct_rotated_queries) const;
+      absl::Span<const RnsCiphertext> ct_rotated_queries);
 
   // Compute the matrix-vector product with the encrypted query vector when the
   // database has been preprocessed.
   // Returns error if `Preprocess` has not been called.
   absl::StatusOr<std::vector<RnsCiphertext>> InnerProductWithPreprocessedPads(
-      absl::Span<const RnsCiphertext> ct_rotated_queries) const;
+      absl::Span<const RnsCiphertext> ct_rotated_queries);
 
   // Accessors
   int NumBlocks() const { return diagonals_.size(); }
@@ -74,11 +74,13 @@ class Database {
  private:
   explicit Database(const RnsContext* rns_context,
                     std::vector<const PrimeModulus*> moduli, Encoder encoder,
-                    std::vector<std::vector<RnsPolynomial>> diagonals)
+                    std::vector<std::vector<RnsPolynomial>> diagonals,
+                    std::vector<RnsCiphertext> ct_inner_products)
       : rns_context_(rns_context),
         moduli_(std::move(moduli)),
         encoder_(std::move(encoder)),
-        diagonals_(std::move(diagonals)) {}
+        diagonals_(std::move(diagonals)),
+        ct_inner_products_(std::move(ct_inner_products)) {}
 
   const RnsContext* rns_context_;
 
@@ -93,6 +95,9 @@ class Database {
   // The random pads, i.e. the "a" parts, of the ciphertexts encrypting the
   // matrix-vector products between the blocks of diagonals and the query vector
   std::vector<RnsPolynomial> pad_inner_products_;
+
+  // TODO
+  std::vector<RnsCiphertext> ct_inner_products_;
 };
 
 }  // namespace linpir

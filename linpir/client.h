@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+#include <queue>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -66,12 +67,12 @@ class Client {
 
   // Samples a fresh RLWE secret key which is cached in `secret_key_`, and
   // returns a ciphertext encrypting the vector under `secret_key_`.
-  absl::StatusOr<RnsCiphertext> EncryptQuery(
-      absl::Span<const RlweInteger> query_vector);
+  absl::StatusOr<std::vector<RnsCiphertext>> EncryptQuery(
+      std::vector<std::vector<RlweInteger>> query_vectors);
 
   // This variant samples a RLWE secret key using the given PRNG seed.
-  absl::StatusOr<RnsCiphertext> EncryptQuery(
-      absl::Span<const RlweInteger> query_vector,
+  absl::StatusOr<std::vector<RnsCiphertext>> EncryptQuery(
+      std::vector<std::vector<RlweInteger>> query_vectors,
       absl::string_view prng_seed_sk);
 
   // Returns a Galois key based on the secret key that is sampled using the
@@ -82,28 +83,28 @@ class Client {
   // Returns a Galois key based on the cached `secret_key_`.
   absl::StatusOr<RnsGaloisKey> GenerateGaloisKey() const;
 
-  // Returns a LinPIR request including the given ciphertext and Galois key.
-  absl::StatusOr<LinPirRequest> GenerateRequest(const RnsCiphertext& ct_query,
-                                                const RnsGaloisKey& gk) const {
-    LinPirRequest request;
-    RLWE_ASSIGN_OR_RETURN(RnsPolynomial ct_query_b, ct_query.Component(0));
-    RLWE_ASSIGN_OR_RETURN(*request.mutable_ct_query_b(),
-                          ct_query_b.Serialize(rns_moduli_));
-    for (auto const& gk_key_b : gk.GetKeyB()) {
-      RLWE_ASSIGN_OR_RETURN(*request.add_gk_key_bs(),
-                            gk_key_b.Serialize(rns_moduli_));
-    }
-    return request;
-  }
-
-  // Returns a LinPIR request including ciphertext that encrypts `query_vector`
-  // under a fresh RLWE secret key and a corresponding Galois key.
-  absl::StatusOr<LinPirRequest> GenerateRequest(
-      absl::Span<const RlweInteger> query_vector) {
-    RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_query, EncryptQuery(query_vector));
-    RLWE_ASSIGN_OR_RETURN(RnsGaloisKey gk, GenerateGaloisKey());
-    return GenerateRequest(ct_query, gk);
-  }
+//  // Returns a LinPIR request including the given ciphertext and Galois key.
+//  absl::StatusOr<LinPirRequest> GenerateRequest(const RnsCiphertext& ct_query,
+//                                                const RnsGaloisKey& gk) const {
+//    LinPirRequest request;
+//    RLWE_ASSIGN_OR_RETURN(RnsPolynomial ct_query_b, ct_query.Component(0));
+//    RLWE_ASSIGN_OR_RETURN(*request.mutable_ct_query_b(),
+//                          ct_query_b.Serialize(rns_moduli_));
+//    for (auto const& gk_key_b : gk.GetKeyB()) {
+//      RLWE_ASSIGN_OR_RETURN(*request.add_gk_key_bs(),
+//                            gk_key_b.Serialize(rns_moduli_));
+//    }
+//    return request;
+//  }
+//
+//  // Returns a LinPIR request including ciphertext that encrypts `query_vector`
+//  // under a fresh RLWE secret key and a corresponding Galois key.
+//  absl::StatusOr<LinPirRequest> GenerateRequest(
+//      absl::Span<const RlweInteger> query_vector) {
+//    RLWE_ASSIGN_OR_RETURN(RnsCiphertext ct_query, EncryptQuery(query_vector));
+//    RLWE_ASSIGN_OR_RETURN(RnsGaloisKey gk, GenerateGaloisKey());
+//    return GenerateRequest(ct_query, gk);
+//  }
 
   // Recovers the inner products from `response`, one per database matrix.
   absl::StatusOr<std::vector<std::vector<RlweInteger>>> Recover(

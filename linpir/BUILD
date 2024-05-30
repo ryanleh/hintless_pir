@@ -70,6 +70,9 @@ cc_library(
         "@com_google_absl//absl/status:statusor",
         "@com_google_absl//absl/types:span",
     ],
+    copts = [ 
+        '-fopenmp',
+    ], 
 )
 
 cc_test(
@@ -126,6 +129,9 @@ cc_library(
         "@com_google_absl//absl/types:span",
         "@com_google_protobuf//:protobuf_lite",
     ],
+    copts = [ 
+        '-fopenmp',
+    ], 
 )
 
 cc_test(

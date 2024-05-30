@@ -21,6 +21,7 @@
 #include <utility>
 #include <vector>
 
+
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -173,6 +174,7 @@ absl::Status Server<RlweInteger>::Preprocess() {
   for (auto const& database : databases_) {
     RLWE_RETURN_IF_ERROR(database->Preprocess(ct_pads_));
   }
+
   return absl::OkStatus();
 }
 
@@ -204,6 +206,95 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
   return response;
 }
 
+// TODO: You know what to do
+template <typename RlweInteger>
+absl::Status Server<RlweInteger>::PreprocessRequest(
+    std::vector<rlwe::SerializedRnsPolynomial>& proto_ct_query_bs,
+    const google::protobuf::RepeatedPtrField<rlwe::SerializedRnsPolynomial>& proto_gk_key_bs
+) {
+    // Deserialize the "b" components from request and build the query ciphertexts
+    // and the Galois key.
+    int num_rotations = params_.rows_per_block / 2;
+    batch_size_ = proto_ct_query_bs.size();
+    rotated_queries_.clear();
+    rotated_queries_.resize(batch_size_);
+    for (int i = 0; i < batch_size_; i++) {
+        RLWE_ASSIGN_OR_RETURN(
+            RnsPolynomial ct_query_b,
+            RnsPolynomial::Deserialize(proto_ct_query_bs[i], rns_moduli_)
+        );
+        rotated_queries_[i].reserve(num_rotations);
+        rotated_queries_[i].push_back(RnsCiphertext({std::move(ct_query_b), ct_pads_[0]}, rns_moduli_,
+                         /*power_of_s=*/1, /*error=*/0, &rns_error_params_,
+                         rns_context_));
+    }
+
+    std::vector<RnsPolynomial> gk_key_bs;
+    gk_key_bs.reserve(proto_gk_key_bs.size());
+    for (int i = 0; i < proto_gk_key_bs.size(); ++i) {
+        RLWE_ASSIGN_OR_RETURN(
+            RnsPolynomial gk_key_b,
+            RnsPolynomial::Deserialize(proto_gk_key_bs[i], rns_moduli_));
+        gk_key_bs.push_back(std::move(gk_key_b));
+    }
+    RLWE_ASSIGN_OR_RETURN(
+      RnsGaloisKey gk,
+      RnsGaloisKey::CreateFromKeyComponents(
+          gk_pads_, std::move(gk_key_bs), /*power=*/5, &rns_gadget_,
+          rns_moduli_, prng_seed_gk_pad_, params_.prng_type));
+
+    gk_ = std::make_unique<RnsGaloisKey>(std::move(gk));
+  
+    // Print the size of the rotated queries
+    // 
+    // We can just look at one rotation, look the number of coefficients
+    // + the number of RNS components, multiply by the size
+    auto q = rotated_queries_[0][0];
+    uint64_t q_bytes = q.Len() * q.NumCoeffs() * q.Moduli().size() * sizeof(RlweInteger);
+    uint64_t q_kb = (q_bytes * rotated_queries_.size()) / (1 << 10);
+    
+    auto gk_bytes = (*gk_).Serialize().value().ByteSizeLong();
+    uint64_t gk_kb = gk_bytes / (1 << 10);
+    
+    std::cout << "Query size (" << rotated_queries_.size() << "): " << q_kb << " KB, "
+        << "Rotation Key: " << gk_kb << " KB" << std::endl;
+    
+
+    return absl::OkStatus();
+}
+
+template <typename RlweInteger>
+absl::StatusOr<std::vector<LinPirResponse>> Server<RlweInteger>::ProcessRequest() {
+    int num_rotations = params_.rows_per_block / 2;
+
+  // Compute inner products with the databases and serialize.
+  std::vector<LinPirResponse> responses(batch_size_);
+  #pragma omp parallel for 
+  for (int i = 0; i < batch_size_; i++) {
+    // Compute all rotations of the query vector.
+    for (int j = 1; j < num_rotations; ++j) {
+        RnsCiphertext ct_sub = rotated_queries_[i][j - 1].Substitute(5).value();
+        RnsCiphertext ct_rot = (*gk_).ApplyToWithRandomPad(ct_sub, ct_sub_pad_digits_[j - 1], ct_pads_[j]).value();
+        rotated_queries_[i].push_back(std::move(ct_rot));
+    }
+
+    responses[i].mutable_ct_inner_products()->Reserve(databases_.size());
+    for (auto const& database : databases_) {
+      std::vector<RnsCiphertext> ct_blocks = database->InnerProductWithPreprocessedPads(rotated_queries_[i]).value();
+      LinPirResponse::EncryptedInnerProduct inner_product;
+      inner_product.mutable_ct_blocks()->Reserve(ct_blocks.size());
+      for (auto const& ct : ct_blocks) {
+        *inner_product.add_ct_blocks() = ct.Serialize().value();
+      }
+      *responses[i].add_ct_inner_products() = std::move(inner_product);
+    }
+    rotated_queries_[i].erase(rotated_queries_[i].begin() + 1, rotated_queries_[i].end());
+  }
+  
+
+  return responses;
+}
+
 template <typename RlweInteger>
 absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
     const ::rlwe::SerializedRnsPolynomial& proto_ct_query_b,
@@ -231,7 +322,7 @@ absl::StatusOr<LinPirResponse> Server<RlweInteger>::HandleRequest(
       RnsGaloisKey::CreateFromKeyComponents(
           gk_pads_, std::move(gk_key_bs), /*power=*/5, &rns_gadget_,
           rns_moduli_, prng_seed_gk_pad_, params_.prng_type));
-
+    
   // Compute all rotations of the query vector.
   int num_rotations = params_.rows_per_block / 2;
   std::vector<RnsCiphertext> ct_rotated_queries;
