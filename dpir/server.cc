@@ -144,9 +144,9 @@ absl::Status Server::GeneratePublicParams() {
     lwe_query_pad_ = std::make_unique<const lwe::Matrix>(std::move(pad));
   }
 
-  // Update the hint
-  RLWE_RETURN_IF_ERROR(database_->UpdateLweQueryPad(lwe_query_pad_.get()));
-  RLWE_RETURN_IF_ERROR(database_->UpdateHints());
+//  // Update the hint
+//  RLWE_RETURN_IF_ERROR(database_->UpdateLweQueryPad(lwe_query_pad_.get()));
+//  RLWE_RETURN_IF_ERROR(database_->UpdateHints());
 
   return absl::OkStatus();
 }

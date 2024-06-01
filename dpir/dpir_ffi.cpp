@@ -18,31 +18,31 @@ void server_free(server_t* server) {
     free(server);
 }
 
-//bytes_t server_set_hint(server_t* server, ints_t matrix) {
-//    // First, check that the hint size is what we expect
-//    auto db = server->s->GetDatabase();
-//    auto hints = db->Hints();
-//    if (hints.size() != 1) {
-//        std::cerr << "Invalid number of hints" << std::endl;
-//    }
-//
-//    // Set the hint
-//    auto hint = hints[0];
-//    for (size_t i = 0; i < matrix.size; i++) {
-//        *(hint.data() + i) = *(matrix.data + i);
-//    }
-//
-//    // Now preprocess and grab the public parameters
-//    server->s->Preprocess();
-//    auto params = server->s->GetPublicParams();
-//
-//    // Serialize to byte object
-//    size_t num_bytes = params.ByteSizeLong();
-//    char* buf = new char [num_bytes];
-//    params.SerializeToArray(buf, num_bytes);
-//
-//    return bytes_t{ .data = buf, .size = num_bytes };
-//}
+bytes_t server_set_hint(server_t* server, ints_t matrix) {
+    // First, check that the hint size is what we expect
+    auto db = server->s->GetDatabase();
+    auto hints = db->Hints();
+    if (hints.size() != 1) {
+        std::cerr << "Invalid number of hints" << std::endl;
+    }
+
+    // Set the hint
+    auto hint = hints[0];
+    for (size_t i = 0; i < matrix.size; i++) {
+        *(hint.data() + i) = *(matrix.data + i);
+    }
+
+    // Now preprocess and grab the public parameters
+    server->s->Preprocess();
+    auto params = server->s->GetPublicParams();
+
+    // Serialize to byte object
+    size_t num_bytes = params.ByteSizeLong();
+    char* buf = new char [num_bytes];
+    params.SerializeToArray(buf, num_bytes);
+
+    return bytes_t{ .data = buf, .size = num_bytes };
+}
 //
 //void server_set_query(server_t* server, bytes_t msg) {
 //    HintlessPirRequest request;

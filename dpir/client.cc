@@ -297,42 +297,15 @@ absl::StatusOr<std::vector<std::string>> Client::RecoverRecord(const HintlessPir
 absl::StatusOr<std::vector<std::vector<uint32_t>>> Client::RecoverInts(const HintlessPirResponse& response) {
   int num_shards =
       DivAndRoundUp(params_.db_record_bit_size, params_.lwe_plaintext_bit_size);
-  if (response.ct_records_size() != num_shards * batch_size_) {
-    return absl::InvalidArgumentError("`response` has incorrect size.");
-  }
-
   // Recover decryption_parts = Hint * LWE secret = Database * A * LWE secret.
   RLWE_ASSIGN_OR_RETURN(std::vector<std::vector<lwe::Vector>> decryption_parts,
                         RecoverLweDecryptionParts(response));
 
-  // Decrypt the LWE ciphertexts in response.
-  auto ct_per = response.ct_records_size() / batch_size_;
   std::vector<std::vector<uint32_t>> results(batch_size_);
   for (int i = 0; i < batch_size_; i++) {
-      std::vector<lwe::Integer> values;
-      values.reserve(ct_per);
-      for (int j = 0; j < ct_per; ++j) {
-        lwe::Vector ct_records = DeserializeLweCiphertext(response.ct_records(i * ct_per + j));
-        if (ct_records.rows() != params_.db_rows) {
-          return absl::InvalidArgumentError(absl::StrCat(
-              "The server response has incorrect dimension; got ",
-              ct_records.rows(), " but expecting ", params_.db_rows, "."));
-        }
-
-        // Remove hint * s from the server response, which gives us \Delta * m + e.
-        lwe::Vector noisy_plaintext = ct_records.row(state_.row_idx[i]);
-        noisy_plaintext[0] -= decryption_parts[i][j][state_.row_idx[i]];
-
-        // Remove the error e.
-        int log_scaling_factor =
-            params_.lwe_modulus_bit_size - params_.lwe_plaintext_bit_size;
-        RLWE_RETURN_IF_ERROR(
-            lwe::RemoveErrorInPlace(noisy_plaintext, log_scaling_factor));
-
-        // Extracting the coefficient from the 1 x 1 matrix noisy_plaintext.
-        values.push_back(noisy_plaintext.eval()(0));
-      }
-      results[i] = values;
+    for (int j = 0; j < decryption_parts[i].size(); j++) {
+        results[i].insert(results[i].end(), decryption_parts[i][j].begin(), decryption_parts[i][j].end());
+    }
   }
   return results;
 }

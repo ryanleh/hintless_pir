@@ -98,14 +98,16 @@ absl::Status Database::UpdateLweQueryPad(const lwe::Matrix* lwe_query_pad) {
   return absl::OkStatus();
 }
 
-//absl::Status Database::SetHint(uint32_t* hint_values) {
-//   for (size_t i = 0, size = xs.size(); i < size; i++)
-//      {
-//  for (int i = 0; i < num_shards; ++i) {
-//    data_matrices[i] =
-//        lwe::Matrix::Zero(parameters.db_rows, parameters.db_cols);
-//
-//}
+void Database::SetHint(std::vector<uint32_t>& vals) {
+    if (vals.size() != hint_matrices_[0].size()) {
+        std::cerr << "Invalid hint size :(" << std::endl;
+    }
+    for (size_t i = 0; i < vals.size(); i++) {
+        auto row_idx = i / hint_matrices_[0].cols();
+        auto col_idx = i % hint_matrices_[0].cols();
+        hint_matrices_[0](row_idx, col_idx) = vals[i];
+    }
+}
 
 absl::Status Database::Append(absl::string_view record) {
   if (record.size() * 8 >= params_.db_record_bit_size + 8 ||
