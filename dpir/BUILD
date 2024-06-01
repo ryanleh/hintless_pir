@@ -189,10 +189,45 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
     ],
-    copts = [ 
-        '-fopenmp',
-    ], 
+#    copts = [ 
+#        '-fopenmp',
+#    ], 
 )
+
+# Hintless SimplePIR server.
+cc_library(
+    name = "dpir_ffi",
+    srcs = ["dpir_ffi.cpp", "dpir_test.h"],
+    hdrs = ["dpir_ffi.h"],
+    deps = [
+        ":database",
+        ":client",
+        ":server",
+        ":parameters",
+        ":serialization_cc_proto",
+        ":utils",
+        "//linpir:database",
+        "//linpir:parameters",
+        "//linpir:server",
+        "//lwe:lwe_symmetric_encryption",
+        "//lwe:types",
+        "@com_github_google_shell-encryption//shell_encryption:montgomery",
+        "@com_github_google_shell-encryption//shell_encryption:statusor_fork",
+        "@com_github_google_shell-encryption//shell_encryption/prng:single_thread_chacha_prng",
+        "@com_github_google_shell-encryption//shell_encryption/prng:single_thread_hkdf_prng",
+        "@com_github_google_shell-encryption//shell_encryption/rns:rns_context",
+        "@com_gitlab_libeigen-eigen//:eigen3",
+        "@com_google_absl//absl/memory",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings",
+        "@com_google_absl//absl/strings:string_view",
+    ],
+#    copts = [ 
+#        '-fopenmp',
+#    ], 
+)
+
 
 cc_test(
     name = "server_test",
@@ -302,5 +337,5 @@ cc_test(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/time",
     ],
-    linkopts = ["-lgomp"]
+#    linkopts = ["-lgomp"]
 )

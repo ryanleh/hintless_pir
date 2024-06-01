@@ -73,22 +73,23 @@ void BM_HintCompr(benchmark::State& state) {
 
   // Create a client and issue `batch_size` requests.
   auto client = Client::Create(params, public_params).value();
-  //std::vector<int64_t> indices = {1, 2, 3, 4, 5, 6};
   std::vector<int64_t> indices = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12};
   auto request = client->GenerateRequest(indices).value();
     
   server->PreprocessQueries(request);
   for (auto _ : state) {
-    auto response = server->ProcessQueries(request);
+    auto response = server->ProcessQueries();
     benchmark::DoNotOptimize(response);
   }
 
+// Need to change server preprocessing + processing to check 
+// 
 //  // Print size of the response
 //  server->PreprocessQueries(request);
-//  auto response = server->ProcessQueries(request).value();
+//  auto response = server->ProcessQueries().value();
 // 
 //  std::cout << "Response size: " << response.ByteSize() / (1 << 10) << "KB" << std::endl;
-
+//
 //  // Sanity check on the correctness of the instantiation.
 //  std::vector<std::string> record = client->RecoverRecord(response).value();
 //  for (int i = 0; i < indices.size(); i++) {

@@ -98,6 +98,15 @@ absl::Status Database::UpdateLweQueryPad(const lwe::Matrix* lwe_query_pad) {
   return absl::OkStatus();
 }
 
+//absl::Status Database::SetHint(uint32_t* hint_values) {
+//   for (size_t i = 0, size = xs.size(); i < size; i++)
+//      {
+//  for (int i = 0; i < num_shards; ++i) {
+//    data_matrices[i] =
+//        lwe::Matrix::Zero(parameters.db_rows, parameters.db_cols);
+//
+//}
+
 absl::Status Database::Append(absl::string_view record) {
   if (record.size() * 8 >= params_.db_record_bit_size + 8 ||
       record.size() * 8 < params_.db_record_bit_size) {

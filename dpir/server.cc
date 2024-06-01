@@ -143,6 +143,11 @@ absl::Status Server::GeneratePublicParams() {
         lwe::ExpandPad(params_.db_cols, params_.lwe_secret_dim, prng.get()));
     lwe_query_pad_ = std::make_unique<const lwe::Matrix>(std::move(pad));
   }
+
+  // Update the hint
+  RLWE_RETURN_IF_ERROR(database_->UpdateLweQueryPad(lwe_query_pad_.get()));
+  RLWE_RETURN_IF_ERROR(database_->UpdateHints());
+
   return absl::OkStatus();
 }
 
@@ -170,10 +175,6 @@ std::vector<std::vector<Integer>> EncodeLweMatrix(const lwe::Matrix& matrix,
 absl::Status Server::Preprocess() {
   // Refresh the PRNG seeds.
   RLWE_RETURN_IF_ERROR(GeneratePublicParams());
-
-  // Make sure the hint is up to date.
-  RLWE_RETURN_IF_ERROR(database_->UpdateLweQueryPad(lwe_query_pad_.get()));
-  RLWE_RETURN_IF_ERROR(database_->UpdateHints());
 
   RlweInteger lwe_modulus = RlweInteger{1} << params_.lwe_modulus_bit_size;
   size_t num_shards = database_->NumShards();
@@ -220,7 +221,7 @@ absl::Status Server::Preprocess() {
   return absl::OkStatus();
 }
 
-absl::Status Server::PreprocessQueries(const HintlessPirRequest& request) {
+absl::Status Server::PreprocessQueries(const HintlessPirRequest request) {
     if (!IsPreprocessed()) {
         return absl::FailedPreconditionError("Server has not been preprocessed.");
     }
@@ -234,19 +235,21 @@ absl::Status Server::PreprocessQueries(const HintlessPirRequest& request) {
         );
         linpir_servers_[k]->PreprocessRequest(queries, request.linpir_gk_bs());
     }
+    request_ = std::move(request);
+
     return absl::OkStatus();
 }
 
-absl::StatusOr<HintlessPirResponse> Server::ProcessQueries(const HintlessPirRequest& request) {
+absl::StatusOr<HintlessPirResponse> Server::ProcessQueries() {
   if (!IsPreprocessed()) {
     return absl::FailedPreconditionError("Server has not been preprocessed.");
   }
 
   HintlessPirResponse response;
-//  for (int i = 0; i < request.ct_query_vector().size(); i++) {
+//  for (int i = 0; i < request_.ct_query_vector().size(); i++) {
 //      // Handle the LWE part of the request.
 //      lwe::Vector ct_query_vector =
-//          DeserializeLweCiphertext(request.ct_query_vector()[i]);
+//          DeserializeLweCiphertext(request_.ct_query_vector()[i]);
 //      RLWE_ASSIGN_OR_RETURN(std::vector<lwe::Vector> ct_records,
 //                            database_->InnerProductWith(ct_query_vector));
 //      for (auto& ct_record : ct_records) {
