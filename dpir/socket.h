@@ -92,6 +92,7 @@ public:
         }
         uint64_t size = *(uint64_t*)(buf);
         result.reserve(size);
+        std::cout << "Receiving " << size << " bytes" << std::endl;
 
         // Then receive all of the bytes
         while (size > 0) {

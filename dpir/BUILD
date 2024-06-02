@@ -189,9 +189,9 @@ cc_library(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
     ],
-#    copts = [ 
-#        '-fopenmp',
-#    ], 
+    copts = [ 
+        '-fopenmp',
+    ], 
 )
 
 # Hintless SimplePIR server.
@@ -222,9 +222,7 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
     ],
-#    copts = [ 
-#        '-fopenmp',
-#    ], 
+    linkopts = ["-lgomp"]
 )
 
 # Hintless SimplePIR server.
@@ -255,9 +253,7 @@ cc_binary(
         "@com_google_absl//absl/strings",
         "@com_google_absl//absl/strings:string_view",
     ],
-#    copts = [ 
-#        '-fopenmp',
-#    ], 
+    linkopts = ["-lgomp"]
 )
 
 
@@ -369,5 +365,5 @@ cc_test(
         "@com_google_absl//absl/flags:parse",
         "@com_google_absl//absl/time",
     ],
-#    linkopts = ["-lgomp"]
+    linkopts = ["-lgomp"]
 )

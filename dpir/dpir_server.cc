@@ -83,20 +83,17 @@ int run_server() {
         std::cerr << "Error parsing query" << std::endl;
     }
     server->PreprocessQueries(query);
-    std::cout << "Server processed query!" << std::endl;
+    std::cout << "Server preprocessed query!" << std::endl;
    
     // Wait for query requests
     while (true) {
         auto request = socket.RecvBytes();
-        if (request[0] == 1) {
-            auto answer = server->ProcessQueries().value();
-            size_t num_bytes = answer.ByteSizeLong();
-            std::vector<char> serialized(num_bytes);
-            answer.SerializeToArray(serialized.data(), num_bytes);
-            socket.SendBytes(serialized);
-        } else {
-            break;
-        }
+        auto answer = server->ProcessQueries().value();
+        size_t num_bytes = answer.ByteSizeLong();
+        std::vector<char> serialized(num_bytes);
+        answer.SerializeToArray(serialized.data(), num_bytes);
+        socket.SendBytes(serialized);
+        std::cout << "Server processed query!" << std::endl;
     }
     
     // Answer any aubsequent queries

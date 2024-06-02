@@ -80,21 +80,25 @@ int run_client() {
     
         std::cout << "Client generated query!" << std::endl;
 
-        // Wait for response
-        auto bytes = socket.RecvBytes();
-        HintlessPirResponse response;
-        bool success = response.ParseFromArray(bytes.data(), bytes.size());
-        if (!success) {
-            std::cerr << "Error parsing response" << std::endl;
+        // Wait for query responses
+        while (true) {
+            // Wait for response
+            auto bytes = socket.RecvBytes();
+            HintlessPirResponse response;
+            bool success = response.ParseFromArray(bytes.data(), bytes.size());
+            if (!success) {
+                std::cerr << "Error parsing response" << std::endl;
+            }
+
+            // Send the final result back to host
+            auto results = client->RecoverInts(response).value();
+            for (int i = 0; i < results.size(); i++) {
+                socket.SendUints(results[i]);
+            }
+            std::cout << "Client produced answer!" << std::endl;
         }
 
-        // Send the final result back to host
-        auto results = client->RecoverInts(response).value();
-        for (int i = 0; i < results.size(); i++) {
-            socket.SendUints(results[i]);
-        }
 
-        std::cout << "Client produced answer!" << std::endl;
     }
     return 0;
 }
