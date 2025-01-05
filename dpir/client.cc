@@ -166,6 +166,39 @@ absl::StatusOr<HintlessPirRequest> Client::GenerateRequest(std::vector<int64_t> 
   return request;
 }
 
+absl::StatusOr<HintlessPirRequest> Client::GenerateQuery(std::vector<std::vector<uint32_t>> keys) {
+  // Step 1. Encrypting the selection vector under LWE.
+  std::string prng_seed_linpir_sk;
+  if (params_.prng_type == rlwe::PRNG_TYPE_HKDF) {
+    RLWE_ASSIGN_OR_RETURN(prng_seed_linpir_sk,
+                          rlwe::SingleThreadHkdfPrng::GenerateSeed());
+
+  } else {
+    RLWE_ASSIGN_OR_RETURN(prng_seed_linpir_sk,
+                          rlwe::SingleThreadChaChaPrng::GenerateSeed());
+  }
+
+  // Plaintext is a selection vector for col_idx
+  std::vector<lwe::Vector> lwe_secrets(keys.size());
+  for (size_t i = 0; i < keys.size(); i++) {
+      lwe_secrets[i] = lwe::Vector::Zero(keys[i].size());
+      for (size_t j = 0; j < keys[i].size(); j++) {
+          lwe_secrets[i][j] = keys[i][j];
+      }
+  }
+
+  // Cache the per request state.
+  state_ = ClientState{.row_idx = {},
+                       .col_idx = {},
+                       .prng_seed_linpir_sk = std::move(prng_seed_linpir_sk)};
+  batch_size_ = keys.size();
+
+  // Step 2. Encrypting the LWE secret using LinPir.
+  HintlessPirRequest request;
+  RLWE_RETURN_IF_ERROR(GenerateLinPirRequestInPlace(request, lwe_secrets));
+  return request;
+}
+
 absl::Status Client::GenerateLinPirRequestInPlace(
     HintlessPirRequest& request,
     const std::vector<lwe::Vector>& lwe_secrets) const {
@@ -257,6 +290,22 @@ absl::StatusOr<std::vector<std::string>> Client::RecoverRecord(const HintlessPir
         values.push_back(noisy_plaintext.eval()(0));
       }
       results[i] = ReconstructRecord(values, params_);
+  }
+  return results;
+}
+
+absl::StatusOr<std::vector<std::vector<uint32_t>>> Client::RecoverInts(const HintlessPirResponse& response) {
+  int num_shards =
+      DivAndRoundUp(params_.db_record_bit_size, params_.lwe_plaintext_bit_size);
+  // Recover decryption_parts = Hint * LWE secret = Database * A * LWE secret.
+  RLWE_ASSIGN_OR_RETURN(std::vector<std::vector<lwe::Vector>> decryption_parts,
+                        RecoverLweDecryptionParts(response));
+
+  std::vector<std::vector<uint32_t>> results(batch_size_);
+  for (int i = 0; i < batch_size_; i++) {
+    for (int j = 0; j < decryption_parts[i].size(); j++) {
+        results[i].insert(results[i].end(), decryption_parts[i][j].begin(), decryption_parts[i][j].end());
+    }
   }
   return results;
 }

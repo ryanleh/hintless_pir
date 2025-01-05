@@ -48,9 +48,15 @@ class Client {
 
   // Returns the request for accessing database[index].
   absl::StatusOr<HintlessPirRequest> GenerateRequest(std::vector<int64_t> indices);
+  
+  // Returns the request for accessing database[index].
+  absl::StatusOr<HintlessPirRequest> GenerateQuery(std::vector<std::vector<uint32_t>> queries);
 
   // Returns the retrieved record from the server response.
   absl::StatusOr<std::vector<std::string>> RecoverRecord(const HintlessPirResponse& response);
+  
+  // Returns the retrieved record from the server response.
+  absl::StatusOr<std::vector<std::vector<uint32_t>>> RecoverInts(const HintlessPirResponse& response);
 
  private:
   using RlweInteger = Parameters::RlweInteger;

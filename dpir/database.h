@@ -52,6 +52,8 @@ class Database {
   // Sets the LWE "A" matrix used by the SimplePIR protocol.
   absl::Status UpdateLweQueryPad(const lwe::Matrix* lwe_query_pad);
 
+  void SetHint(std::vector<uint32_t>& vals);
+
   // Appends a record at the current end of the database.
   absl::Status Append(absl::string_view record);
 
