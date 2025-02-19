@@ -44,59 +44,64 @@ int run_server() {
         return -1;
     };
 
-    // Wait for parameters
-    auto params = kParameters;
-    auto dims = socket.RecvUints();
-    params.db_rows = dims[0];
-    params.db_cols = dims[1];
-    std::cout << "got dims: " << dims[0] << ", " << dims[1] << std::endl;
-
-    // Initialize server
-    auto server = Server::Create(params).value();
-
-    // Receive hint and set on server
-    auto hint_vals = socket.RecvUints();
-    server->GetDatabase()->SetHint(hint_vals);
-    
-    // Preprocess and grab the public parameters
-    if (!server->Preprocess().ok()) {
-        std::cout << "Error preprocessing" << std::endl;
-    }
-    auto public_params = server->GetPublicParams();
-    
-    // Serialize to byte object
-    size_t num_bytes = public_params.ByteSizeLong();
-    std::vector<char> serialized(num_bytes);
-    public_params.SerializeToArray(serialized.data(), num_bytes);
-    
-    // Send to the host
-    socket.SendBytes(serialized);
-
-    std::cout << "Server preprocessed!" << std::endl;
-    
-    // Receive query from client and forward to server
-    auto query_ser = socket.RecvBytes();
-    
-    HintlessPirRequest query;
-    bool success = query.ParseFromArray(query_ser.data(), query_ser.size());
-    if (!success) {
-        std::cerr << "Error parsing query" << std::endl;
-    }
-    server->PreprocessQueries(query);
-    std::cout << "Server preprocessed query!" << std::endl;
-   
-    // Wait for query requests
     while (true) {
-        auto request = socket.RecvBytes();
-        auto answer = server->ProcessQueries().value();
-        size_t num_bytes = answer.ByteSizeLong();
+        // Wait for parameters
+        auto params = kParameters;
+        auto dims = socket.RecvUints();
+        params.db_rows = dims[0];
+        params.db_cols = dims[1];
+        std::cout << "got dims: " << dims[0] << ", " << dims[1] << std::endl;
+
+        // Initialize server
+        auto server = Server::Create(params).value();
+
+        // Receive hint and set on server
+        auto hint_vals = socket.RecvUints();
+        server->GetDatabase()->SetHint(hint_vals);
+        
+        // Preprocess and grab the public parameters
+        if (!server->Preprocess().ok()) {
+            std::cout << "Error preprocessing" << std::endl;
+        }
+        auto public_params = server->GetPublicParams();
+        
+        // Serialize to byte object
+        size_t num_bytes = public_params.ByteSizeLong();
         std::vector<char> serialized(num_bytes);
-        answer.SerializeToArray(serialized.data(), num_bytes);
+        public_params.SerializeToArray(serialized.data(), num_bytes);
+        
+        // Send to the host
         socket.SendBytes(serialized);
-        std::cout << "Server processed query!" << std::endl;
+
+        std::cout << "Server preprocessed!" << std::endl;
+        
+        // Receive query from client and forward to server
+        auto query_ser = socket.RecvBytes();
+        
+        HintlessPirRequest query;
+        bool success = query.ParseFromArray(query_ser.data(), query_ser.size());
+        if (!success) {
+            std::cerr << "Error parsing query" << std::endl;
+        }
+        server->PreprocessQueries(query);
+        std::cout << "Server preprocessed query!" << std::endl;
+       
+        // Wait for query requests
+        const char reset_signal[6] = {0, 1, 2, 3, 4, 5};
+        while (true) {
+            auto request = socket.RecvBytes();
+            if (std::equal(request.begin(), request.end(), reset_signal))
+                break;
+            auto answer = server->ProcessQueries().value();
+            size_t num_bytes = answer.ByteSizeLong();
+            std::vector<char> serialized(num_bytes);
+            answer.SerializeToArray(serialized.data(), num_bytes);
+            socket.SendBytes(serialized);
+            std::cout << "Server processed query!" << std::endl;
+        }
     }
     
-    // Answer any aubsequent queries
+    // Answer any subsequent queries
     return 0;
 }
 

@@ -43,27 +43,27 @@ int run_client() {
         std::cerr << "Error connecting" << std::endl;
         return -1;
     };
-    
-    // Wait for parameters
-    auto params = kParameters;
-    auto dims = socket.RecvUints();
-    params.db_rows = dims[0];
-    params.db_cols = dims[1];
-    params.batch_size = dims[2];
-
-    auto bytes = socket.RecvBytes();
-    HintlessPirServerPublicParams public_params;
-    bool success = public_params.ParseFromArray(bytes.data(), bytes.size());
-    if (!success) {
-        std::cerr << "Error parsing public_params" << std::endl;
-    }
-
-    // Initialize Client
-    auto client = Client::Create(params, public_params).value();
-
-    std::cout << "Client created!" << std::endl;
 
     while (true) {
+        // Wait for parameters
+        auto params = kParameters;
+        auto dims = socket.RecvUints();
+        params.db_rows = dims[0];
+        params.db_cols = dims[1];
+        params.batch_size = dims[2];
+
+        auto bytes = socket.RecvBytes();
+        HintlessPirServerPublicParams public_params;
+        bool success = public_params.ParseFromArray(bytes.data(), bytes.size());
+        if (!success) {
+            std::cerr << "Error parsing public_params" << std::endl;
+        }
+
+        // Initialize Client
+        auto client = Client::Create(params, public_params).value();
+
+        std::cout << "Client created!" << std::endl;
+
         // Wait for keys and generate query
         std::vector<std::vector<uint32_t>> keys(params.batch_size);
         for (int i = 0; i < keys.size(); i++) {
@@ -79,11 +79,15 @@ int run_client() {
         socket.SendBytes(serialized);
     
         std::cout << "Client generated query!" << std::endl;
-
+        
         // Wait for query responses
+        const char reset_signal[6] = {0, 1, 2, 3, 4, 5};
         while (true) {
             // Wait for response
             auto bytes = socket.RecvBytes();
+            if (std::equal(bytes.begin(), bytes.end(), reset_signal))
+                break;
+            
             HintlessPirResponse response;
             bool success = response.ParseFromArray(bytes.data(), bytes.size());
             if (!success) {
@@ -97,8 +101,6 @@ int run_client() {
             }
             std::cout << "Client produced answer!" << std::endl;
         }
-
-
     }
     return 0;
 }
